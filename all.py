@@ -74,6 +74,15 @@ parser.add_argument(
 
 
 parser.add_argument(
+    '-e',
+    '--exclude',
+     metavar='regular_expression',
+     type=comma_separated_values,
+     help='exclude subdomains which matching this regular expression. eg. ".*_domainkey.*"'
+)
+
+
+parser.add_argument(
     '-r',
     '--region',
      metavar='region_name',
@@ -218,6 +227,22 @@ print_event(f"    {account_list}\n\n","cyan")
 combined_subdomains = set()
 
 
+
+def get_dns_value():
+    if 'ResourceRecords' in record :
+        dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
+    elif 'AliasTarget' in record:
+        if 'DNSName' in record['AliasTarget']:
+            dns_value=record['AliasTarget']['DNSName']       
+        else:
+            dns_value="dnsvalueerror1"
+    else:
+        dns_value="dnsvalueerror2"
+    return dns_value
+
+
+
+
 def get_subdomains(zone_id):
     
     subdomains= []
@@ -225,20 +250,43 @@ def get_subdomains(zone_id):
         response = route53.list_resource_record_sets(
             HostedZoneId=zone_id,
         )
+
         for record in response['ResourceRecordSets']:
+
+            def get_dns_value():
+                if 'ResourceRecords' in record :
+                    dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
+                elif 'AliasTarget' in record:
+                    if 'DNSName' in record['AliasTarget']:
+                        dns_value=record['AliasTarget']['DNSName']       
+                    else:
+                        dns_value="dnsvalueerror1"
+                else:
+                    dns_value="dnsvalueerror2"
+                return dns_value
+
             #if record['Type'] not in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
             if args.types:
                 dns_types = list(map(str.upper, args.types))
                 if record['Type'] in dns_types:
+
+
+
+                    get_dns_value()
+
+
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
                     if args.verbose:
-                        print_event(f"    {record['Type']} : {record['Name'].rstrip('.')}","magenta")                  
+                        print_event(f"    {record['Type']} : {record['Name'].rstrip('.')}","magenta")  
+                        print(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}")                
             else:
+                get_dns_value()
                 subdomains.append(record['Name'].rstrip('.'))
                 combined_subdomains.add(record['Name'].rstrip('.'))
                 if args.verbose: 
                     print_event(f"    {record['Type']} : {record['Name'].rstrip('.')}","magenta")
+                    print(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}")
     except Exception as e:
         print(f"Failed to get subdomains for zone {zone_id}: {e}")
 
