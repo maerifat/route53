@@ -5,7 +5,14 @@ from boto3.session import Session
 import argparse
 import openpyxl
 
-def comma_separated_accounts(values):
+
+def print_event(eventmsg,color):
+    if args.verbose:
+        if not args.no_color:
+            eventmsg=colored(eventmsg,color)
+        print(eventmsg)
+
+def comma_separated_values(values):
     return values.split(',')
 
 
@@ -15,8 +22,17 @@ parser.add_argument(
     '-a',
     '--accounts',
     metavar='account_id',
-    type=comma_separated_accounts,
+    type=comma_separated_values,
     help='multiple account_ids separated with comma'
+)
+
+
+parser.add_argument(
+    '-o',
+    '--ouput',
+    metavar='file_name',
+    type=str,
+    help='File name to save as, file type is recognised from the extension.'
 )
 
 
@@ -27,6 +43,14 @@ parser.add_argument(
     '--verbose',
     action='store_true',
     help='Enable verbose to get details.'
+)
+
+
+parser.add_argument(
+    '-nc',
+    '--no-color',
+    action='store_true',
+    help='Color less standard output.'
 )
 
 parser.add_argument(
@@ -40,7 +64,7 @@ parser.add_argument(
     '-t',
     '--types',
      metavar='record_type',
-     type=comma_separated_accounts,
+     type=comma_separated_values,
      help='dns record types separated with comma'
 )
 
@@ -59,19 +83,21 @@ session =Session()
 ###Skeleton Creation###
 
 #Input details
-start_url = 'https://xxxxxawsapps.com/start#'
+start_url = 'https://d-90676ad959.awsapps.com/start#'
 region = 'us-east-1' 
 
 
 #OIDC Connection
 sso_oidc = session.client('sso-oidc')
 client_creds = sso_oidc.register_client(
-    clientName='xxxx',
+    clientName='demandbase',
     clientType='public',
 )
-if args.verbose:
-    if client_creds:
-        print(colored("[+] Client credentials fetched Succussfully.","yellow"))
+if client_creds:
+    print_event("[+] Client credentials fetched Succussfully.","yellow")
+
+
+       
 
 #Device Authorization initiation
 device_authorization = sso_oidc.start_device_authorization(
@@ -79,9 +105,12 @@ device_authorization = sso_oidc.start_device_authorization(
     clientSecret=client_creds['clientSecret'],
     startUrl=start_url,
 )
-if args.verbose:
-    if device_authorization:
-        print(colored("[+] Device authorization has been initiated through browser. Waiting for authorization...","yellow"))
+
+if device_authorization:
+    print_event("[+] Device authorization has been initiated through browser. Waiting for authorization...","yellow")
+
+
+
 
 #Browser Authorization 
 url = device_authorization['verificationUriComplete']
@@ -102,12 +131,22 @@ def authwait():
                 clientId=client_creds['clientId'],
                 clientSecret=client_creds['clientSecret'],
             )
-            if args.verbose:
-                print(colored("Authorization Successful","green"))
+            if n>1:
+                print_event("\r[+] Device yet to be authorized in browser, waiting...","yellow")
+                print_event(f"[+] Authorization Successful after {n} attemps.","green")
+    
+            else:
+                print_event(f"[+] Authorization Successful in first attempt.","green")
+
+
             break
         except sso_oidc.exceptions.AuthorizationPendingException:
             if args.verbose:
-                print(colored("Device yet to be authorized in browser, waiting...","red",attrs=["blink"]))
+                if n==1:
+                    print(colored("Device yet to be authorized in browser, waiting...","red",attrs=["blink"]),end='', flush=True)
+                else:
+                    print(colored("\rDevice yet to be authorized in browser, waiting...","red",attrs=["blink"]),end='', flush=True)
+
             pass
 authwait()
 
@@ -141,19 +180,19 @@ if args.accounts:
 else:
     account_list =  [account['accountId'] for account in account_list_raw['accountList']]
 
-print(f'Total accounts: {len(account_list)}')
-print(account_list) 
+print_event(f'[+] Total accounts: {len(account_list)}','yellow')
+print_event(account_list,"cyan")
 
 
 
 
 
-
+combined_subdomains = []
 
 
 def get_subdomains(zone_id):
     
-    subdomains = []
+    subdomains= []
     try:
         response = route53.list_resource_record_sets(
             HostedZoneId=zone_id,
@@ -164,15 +203,11 @@ def get_subdomains(zone_id):
                 dns_types = list(map(str.upper, args.types))
                 if record['Type'] in dns_types:
                     subdomains.append(record['Name'].rstrip('.'))
-                    if args.verbose:
-                        print(f"{record['Type']} : {record['Name'].rstrip('.')}")
-   
-                    
-                    
+                    print_event(f"{record['Type']} : {record['Name'].rstrip('.')}","magenta")
+                            
             else:
                 subdomains.append(record['Name'].rstrip('.')) 
-                print(record['Name'])
-                print(record['Type'])
+                print_event(f"{record['Type']} : {record['Name'].rstrip('.')}","magenta")
     except Exception as e:
         print(f"Failed to get subdomains for zone {zone_id}: {e}")
 
