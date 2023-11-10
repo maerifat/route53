@@ -200,15 +200,6 @@ account_list_raw = sso.list_accounts(
 
 
 
-access_token = token['accessToken']
-
-
-
-account_list_raw = sso.list_accounts(
-    accessToken=access_token,
-    maxResults=1000  
-)
-
 
 #Fetch all accessible accounts otherwise give list
 
