@@ -8,6 +8,8 @@ import re
 import openpyxl
 
 
+
+
 def print_event(eventmsg,color,on_color=None):
     if args.verbose:
         if not args.no_color:
@@ -80,7 +82,6 @@ parser.add_argument(
 
 
 
-
 parser.add_argument(
     '-t',
     '--types',
@@ -99,9 +100,6 @@ parser.add_argument(
 )
 
 
-
-
-
 parser.add_argument(
     '-o',
     '--output',
@@ -111,17 +109,60 @@ parser.add_argument(
 )
 
 
-
 args = parser.parse_args()
 
 
+def is_text():
+    if args.output:
+        filelocation=args.output
+        if filelocation.endswith('txt'):
+            return True
 
+
+def is_excel():
+    if args.output:
+        filelocation=args.output
+        if filelocation.endswith(('xls','xlsx')):
+            return True
+
+def file_location():
+    if args.output:
+        filelocation=args.output
+        return filelocation
+
+
+if is_excel():
+    workbook = openpyxl.Workbook()
+    sheet=workbook.active
+    sheet_headers= ['Account_Id', 'Record_Name', 'Record_Type','Record_Value']
+    sheet.append(sheet_headers)
+
+
+
+def get_dns_value():
+    if 'ResourceRecords' in record :
+        dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
+        dns_value=",".join(dns_value)
+    elif 'AliasTarget' in record:
+        if 'DNSName' in record['AliasTarget']:
+            dns_value=record['AliasTarget']['DNSName']       
+        else:
+            dns_value="dnsvalueerror1"
+    else:
+        dns_value="dnsvalueerror2"
+    return dns_value
+
+
+def append_row_to_sheet():
+    sheet_row=[account_id,record['Name'].rstrip('.'),record['Type'],get_dns_value()]
+    sheet.append(sheet_row)
 
 
 if args.list:
     args.verbose=None
 
 session =Session()
+
 
 ###Skeleton Creation###
 
@@ -167,7 +208,7 @@ expires_in = device_authorization['expiresIn']
 interval = device_authorization['interval']
 webbrowser.open(url, autoraise=True)
 
-
+#Function to iterate and check if authorization is complete
 def authwait():
     for n in range(1, expires_in // (interval+5) + 1):
         sleep(interval+5)
@@ -196,12 +237,12 @@ def authwait():
                     cprint("\rDevice yet to be authorized in browser, waiting...","red",attrs=["blink"],end='', flush=True)
 
             pass
+
+
+#Wait until authorization
 authwait()
 
-
 access_token = token['accessToken']
-
-
 sso = session.client('sso')
 account_list_raw = sso.list_accounts(
     accessToken=access_token,
@@ -211,11 +252,7 @@ account_list_raw = sso.list_accounts(
 
 
 
-
-
-
 #Fetch all accessible accounts otherwise give list
-
 if args.accounts:
     account_list= args.accounts
 else:
@@ -224,13 +261,7 @@ else:
 print_event(f'[+] Total accounts: {len(account_list)}','yellow')
 print_event(f"    {account_list}\n\n","cyan")
 
-
-
-
-
 combined_subdomains = set()
-
-
 
 def get_subdomains(zone_id):
     
@@ -240,25 +271,18 @@ def get_subdomains(zone_id):
             HostedZoneId=zone_id,
         )
 
+        global record
         for record in response['ResourceRecordSets']:
 
-            def get_dns_value():
-                if 'ResourceRecords' in record :
-                    dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
-                elif 'AliasTarget' in record:
-                    if 'DNSName' in record['AliasTarget']:
-                        dns_value=record['AliasTarget']['DNSName']       
-                    else:
-                        dns_value="dnsvalueerror1"
-                else:
-                    dns_value="dnsvalueerror2"
-                return dns_value
+
 
             #if record['Type']  in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
             if args.types and not args.exclude:
                 dns_types = list(map(str.upper, args.types))
                 if record['Type'] in dns_types:
                     get_dns_value()
+                    if is_excel():
+                        append_row_to_sheet()
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
                     print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
@@ -267,6 +291,8 @@ def get_subdomains(zone_id):
                 regex_pattern = args.exclude
                 if not re.match(regex_pattern, record['Name'].rstrip('.')):
                     get_dns_value()
+                    if is_excel():
+                        append_row_to_sheet()
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
                     print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
@@ -276,11 +302,15 @@ def get_subdomains(zone_id):
                 regex_pattern = args.exclude
                 if (record['Type'] in dns_types) and (not re.match(regex_pattern, record['Name'].rstrip('.'))):
                     get_dns_value()
+                    if is_excel():
+                        append_row_to_sheet()
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
                     print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")              
             else:
                 get_dns_value()
+                if is_excel():
+                    append_row_to_sheet()
                 subdomains.append(record['Name'].rstrip('.'))
                 combined_subdomains.add(record['Name'].rstrip('.'))
                 print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
@@ -291,11 +321,7 @@ def get_subdomains(zone_id):
 
 
 
-
-
-
-
-
+#Iterate through accounts
 
 for account_id in account_list:
     account_roles = sso.list_account_roles(
@@ -329,35 +355,35 @@ for account_id in account_list:
         response = route53.list_hosted_zones()
 
 
-        if args.verbose:
-            cprint(f"[+] Route53 DNS records in account {account_id}:","yellow","on_blue")
+        
+        print_event(f"[+] Route53 DNS records in account {account_id}:","yellow","on_blue")
+
         for zone in response['HostedZones']:
             zone_id = zone['Id']
             subdomains = get_subdomains(zone_id)
 
 
-        if args.verbose:
-            print()
-            print()
+        print_event("","green")
+        print_event("","green")
     except:
         cprint(f"You do not have enough privileges in account {account_id}!", "red", attrs=["bold"], file=sys.stderr)
 
 
 print_event(f"[+] Unique subdomains across all accounts: {len(combined_subdomains)}","yellow","on_blue")
 for subdomain in combined_subdomains:
-
     print_event(f"    {subdomain}", "light_cyan")
     
-if args.output:
-    filelocation=args.output
-    if filelocation.endswith('txt'):
-        with open(filelocation,'w') as textfile:
-            for subdomain in combined_subdomains:
-                textfile.write(subdomain+'\n')
-        print_event(f"\n[+] All subdomains have been saved in text format in {filelocation}","yellow")
+
+
+if is_text():
+    with open(file_location(),'w') as textfile:
+        for subdomain in combined_subdomains:
+            textfile.write(subdomain+'\n')
+    print_event(f"\n[+] All subdomains have been saved in text format in {file_location()}","yellow")
 
     
 
 
-
-
+if is_excel():
+    workbook.save(file_location())
+    print_event(f"\n[+] All data has been saved in excel format in {file_location()}","yellow")
