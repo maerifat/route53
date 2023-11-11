@@ -4,6 +4,7 @@ from time import time, sleep
 import webbrowser
 from boto3.session import Session
 import argparse
+import re
 import openpyxl
 
 
@@ -22,6 +23,18 @@ def comma_separated_values(values):
 
 #Argument parsing
 parser = argparse.ArgumentParser(description='Route53 Record Collector')
+
+
+
+parser.add_argument(
+    '-u',
+    '--start-url',
+     metavar='Start URL',
+     type=str,
+     required=True,
+     help='aws SSO start URL. eg. https://d-1010ad440.awsapps.com/start'
+)
+
 parser.add_argument(
     '-a',
     '--accounts',
@@ -31,15 +44,14 @@ parser.add_argument(
 )
 
 
+
 parser.add_argument(
-    '-o',
-    '--output',
-    metavar='file_name',
-    type=str,
-    help='File name to save as, file type is recognised from the extension. eg subdomains.xlsx'
+    '-r',
+    '--region',
+     metavar='region_name',
+     type=str,
+     help='Region name. eg. us-east-1'
 )
-
-
 
 
 parser.add_argument(
@@ -50,12 +62,6 @@ parser.add_argument(
 )
 
 
-parser.add_argument(
-    '-nc',
-    '--no-color',
-    action='store_true',
-    help='Color less standard output.'
-)
 
 parser.add_argument(
     '-l',
@@ -63,6 +69,17 @@ parser.add_argument(
     action='store_true',
     help='List all subdomains, without any verbose.'
 )
+
+parser.add_argument(
+    '-nc',
+    '--no-color',
+    action='store_true',
+    help='Color less standard output.'
+)
+
+
+
+
 
 parser.add_argument(
     '-t',
@@ -77,26 +94,20 @@ parser.add_argument(
     '-e',
     '--exclude',
      metavar='regular_expression',
-     type=comma_separated_values,
-     help='exclude subdomains which matching this regular expression. eg. ".*_domainkey.*"'
+     type=str,
+     help='exclude subdomains which match this regular expression. eg. ".*_domainkey.*"'
 )
 
 
-parser.add_argument(
-    '-r',
-    '--region',
-     metavar='region_name',
-     type=str,
-     help='Region name. eg. us-east-1'
-)
+
+
 
 parser.add_argument(
-    '-u',
-    '--start-url',
-     metavar='Start URL',
-     type=str,
-     required=True,
-     help='aws SSO start URL. eg. https://d-1010ad440.awsapps.com/start'
+    '-o',
+    '--output',
+    metavar='file_name',
+    type=str,
+    help='File name to save as, file type is recognised from the extension. eg subdomains.xlsx'
 )
 
 
@@ -201,6 +212,8 @@ account_list_raw = sso.list_accounts(
 
 
 
+
+
 #Fetch all accessible accounts otherwise give list
 
 if args.accounts:
@@ -216,21 +229,6 @@ print_event(f"    {account_list}\n\n","cyan")
 
 
 combined_subdomains = set()
-
-
-
-def get_dns_value():
-    if 'ResourceRecords' in record :
-        dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
-    elif 'AliasTarget' in record:
-        if 'DNSName' in record['AliasTarget']:
-            dns_value=record['AliasTarget']['DNSName']       
-        else:
-            dns_value="dnsvalueerror1"
-    else:
-        dns_value="dnsvalueerror2"
-    return dns_value
-
 
 
 
@@ -256,28 +254,36 @@ def get_subdomains(zone_id):
                     dns_value="dnsvalueerror2"
                 return dns_value
 
-            #if record['Type'] not in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
-            if args.types:
+            #if record['Type']  in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
+            if args.types and not args.exclude:
                 dns_types = list(map(str.upper, args.types))
                 if record['Type'] in dns_types:
-
-
-
                     get_dns_value()
-
-
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
-                    if args.verbose:
-                        print_event(f"    {record['Type']} : {record['Name'].rstrip('.')}","magenta")  
-                        print(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}")                
+                    print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
+
+            elif args.exclude and not args.types:
+                regex_pattern = args.exclude
+                if not re.match(regex_pattern, record['Name'].rstrip('.')):
+                    get_dns_value()
+                    subdomains.append(record['Name'].rstrip('.'))
+                    combined_subdomains.add(record['Name'].rstrip('.'))
+                    print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
+
+            elif args.types and args.exclude:
+                dns_types = list(map(str.upper, args.types))
+                regex_pattern = args.exclude
+                if (record['Type'] in dns_types) and (not re.match(regex_pattern, record['Name'].rstrip('.'))):
+                    get_dns_value()
+                    subdomains.append(record['Name'].rstrip('.'))
+                    combined_subdomains.add(record['Name'].rstrip('.'))
+                    print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")              
             else:
                 get_dns_value()
                 subdomains.append(record['Name'].rstrip('.'))
                 combined_subdomains.add(record['Name'].rstrip('.'))
-                if args.verbose: 
-                    print_event(f"    {record['Type']} : {record['Name'].rstrip('.')}","magenta")
-                    print(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}")
+                print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
     except Exception as e:
         print(f"Failed to get subdomains for zone {zone_id}: {e}")
 
