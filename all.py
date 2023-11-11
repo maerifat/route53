@@ -1,12 +1,26 @@
 import sys
-from termcolor import colored,cprint
+from termcolor import colored,cprint 
 from time import time, sleep
 import webbrowser
 from boto3.session import Session
 import argparse
 import re
 import openpyxl
+from openpyxl.styles import Font,PatternFill
+import ipaddress
+import dns.resolver #pip3 install dnspython
 
+
+def is_ip(text):
+    try:
+        ipaddress.IPv4Address(text)  
+        return True
+    except ipaddress.AddressValueError:
+        try:
+            ipaddress.IPv6Address(text) 
+            return True
+        except ipaddress.AddressValueError:
+            return False
 
 
 
@@ -101,6 +115,15 @@ parser.add_argument(
 
 
 parser.add_argument(
+    '-cd',
+    '--check-dangling',
+    action='store_true',
+    help='Checks if the DNS record is dangling.'
+)
+
+
+
+parser.add_argument(
     '-o',
     '--output',
     metavar='file_name',
@@ -134,18 +157,32 @@ def file_location():
 if is_excel():
     workbook = openpyxl.Workbook()
     sheet=workbook.active
-    sheet_headers= ['Account_Id', 'Record_Name', 'Record_Type','Record_Value']
+    if args.check_dangling:
+        sheet_headers= ['Account_Id', 'Zone_Name','Record_Name', 'Record_Type','Is_Alias','Is_Dangling','Record_Value']
+    else:
+        sheet_headers= ['Account_Id', 'Zone_Name','Record_Name', 'Record_Type','Is_Alias','Record_Value']
     sheet.append(sheet_headers)
+    sheet.column_dimensions['A'].width = 15
+    sheet.column_dimensions['B'].width = 30
+    sheet.column_dimensions['C'].width = 40
+    sheet.column_dimensions['D'].width = 12
+    sheet.column_dimensions['E'].width = 12
+    sheet.column_dimensions['F'].width = 12
+    sheet.column_dimensions['G'].width = 70
 
 
 
 def get_dns_value():
-    if 'ResourceRecords' in record :
+    global dns_value
+    global is_alias
+    if record.get('ResourceRecords'):
         dns_value=[value['Value'] for value in  record['ResourceRecords'] ]
-        dns_value=",".join(dns_value)
-    elif 'AliasTarget' in record:
-        if 'DNSName' in record['AliasTarget']:
-            dns_value=record['AliasTarget']['DNSName']       
+        dns_value=" , ".join(dns_value)
+        is_alias=False
+    elif record.get('AliasTarget'):
+        if record['AliasTarget'].get('DNSName'):
+            dns_value=record['AliasTarget']['DNSName']
+            is_alias=True     
         else:
             dns_value="dnsvalueerror1"
     else:
@@ -153,9 +190,32 @@ def get_dns_value():
     return dns_value
 
 
+
+def is_dangling(dns_value):
+
+    if record['Type'] == 'CNAME' or is_alias:
+        try:
+            result = dns.resolver.resolve(dns_value)
+            if result:
+                return "No"
+        except dns.resolver.NXDOMAIN:
+            return "Yes"
+        except dns.resolver.Timeout:
+            return "Time Out"
+        except dns.resolver.NoAnswer:
+            return "No Answwer"
+    else: 
+        return "NA"
+
+
+
 def append_row_to_sheet():
-    sheet_row=[account_id,record['Name'].rstrip('.'),record['Type'],get_dns_value()]
+    if args.check_dangling:
+       sheet_row=[account_id,zone_name,record['Name'].rstrip('.'),record['Type'],is_alias,is_dangling(dns_value),get_dns_value()]
+    else:
+        sheet_row=[account_id,zone_name,record['Name'].rstrip('.'),record['Type'],is_alias,get_dns_value()]
     sheet.append(sheet_row)
+
 
 
 if args.list:
@@ -267,53 +327,56 @@ def get_subdomains(zone_id):
     
     subdomains= []
     try:
-        response = route53.list_resource_record_sets(
-            HostedZoneId=zone_id,
-        )
-
-        global record
-        for record in response['ResourceRecordSets']:
-
+        paginate_resource_record_sets = route53.get_paginator('list_resource_record_sets')
+        for record_response in paginate_resource_record_sets.paginate(
+            HostedZoneId = zone_id,
+            MaxItems='300'
+            ):
 
 
-            #if record['Type']  in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
-            if args.types and not args.exclude:
-                dns_types = list(map(str.upper, args.types))
-                if record['Type'] in dns_types:
+            global record
+            for record in record_response['ResourceRecordSets']:
+
+
+
+                #if record['Type']  in ['SOA', 'NS', 'MX', 'TXT'] and not record['Name'].startswith('_'):
+                if args.types and not args.exclude:
+                    dns_types = list(map(str.upper, args.types))
+                    if record['Type'] in dns_types:
+                        get_dns_value()
+                        if is_excel():
+                            append_row_to_sheet()
+                        subdomains.append(record['Name'].rstrip('.'))
+                        combined_subdomains.add(record['Name'].rstrip('.'))
+                        print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
+
+                elif args.exclude and not args.types:
+                    regex_pattern = args.exclude
+                    if not re.match(regex_pattern, record['Name'].rstrip('.')):
+                        get_dns_value()
+                        if is_excel():
+                            append_row_to_sheet()
+                        subdomains.append(record['Name'].rstrip('.'))
+                        combined_subdomains.add(record['Name'].rstrip('.'))
+                        print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
+
+                elif args.types and args.exclude:
+                    dns_types = list(map(str.upper, args.types))
+                    regex_pattern = args.exclude
+                    if (record['Type'] in dns_types) and (not re.match(regex_pattern, record['Name'].rstrip('.'))):
+                        get_dns_value()
+                        if is_excel():
+                            append_row_to_sheet()
+                        subdomains.append(record['Name'].rstrip('.'))
+                        combined_subdomains.add(record['Name'].rstrip('.'))
+                        print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")              
+                else:
                     get_dns_value()
                     if is_excel():
                         append_row_to_sheet()
                     subdomains.append(record['Name'].rstrip('.'))
                     combined_subdomains.add(record['Name'].rstrip('.'))
                     print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
-
-            elif args.exclude and not args.types:
-                regex_pattern = args.exclude
-                if not re.match(regex_pattern, record['Name'].rstrip('.')):
-                    get_dns_value()
-                    if is_excel():
-                        append_row_to_sheet()
-                    subdomains.append(record['Name'].rstrip('.'))
-                    combined_subdomains.add(record['Name'].rstrip('.'))
-                    print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
-
-            elif args.types and args.exclude:
-                dns_types = list(map(str.upper, args.types))
-                regex_pattern = args.exclude
-                if (record['Type'] in dns_types) and (not re.match(regex_pattern, record['Name'].rstrip('.'))):
-                    get_dns_value()
-                    if is_excel():
-                        append_row_to_sheet()
-                    subdomains.append(record['Name'].rstrip('.'))
-                    combined_subdomains.add(record['Name'].rstrip('.'))
-                    print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")              
-            else:
-                get_dns_value()
-                if is_excel():
-                    append_row_to_sheet()
-                subdomains.append(record['Name'].rstrip('.'))
-                combined_subdomains.add(record['Name'].rstrip('.'))
-                print_event(f"{record['Type']} : {record['Name']} ==> {get_dns_value()}","magenta")
     except Exception as e:
         print(f"Failed to get subdomains for zone {zone_id}: {e}")
 
@@ -352,15 +415,21 @@ for account_id in account_list:
 
         #Route53 client
         route53 = session.client('route53')
-        response = route53.list_hosted_zones()
-
-
         
         print_event(f"[+] Route53 DNS records in account {account_id}:","yellow","on_blue")
 
-        for zone in response['HostedZones']:
-            zone_id = zone['Id']
-            subdomains = get_subdomains(zone_id)
+        paginate_hosted_zones = route53.get_paginator('list_hosted_zones')
+
+        for zone_response in paginate_hosted_zones.paginate():
+
+            for zone in zone_response['HostedZones']:
+                zone_id = zone['Id']
+                zone_name = zone['Name'].rstrip('.')
+
+                print_event("","green")
+                print_event(f"[+] Route53 DNS records in ZoneName {zone_name}:","yellow","on_light_blue")
+                print_event("","green")
+                subdomains = get_subdomains(zone_id)
 
 
         print_event("","green")
@@ -385,5 +454,19 @@ if is_text():
 
 
 if is_excel():
+
+
+    header_font = Font(color="FFFFFF", bold=True)  # White bold font
+    header_fill = PatternFill(start_color="000080", end_color="000080", fill_type="solid")  # Blue background
+
+# Apply font and fill to header row
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=6, max_col=6):
+        for cell in row:
+            if cell.value == "Yes":
+                cell.font = Font(color="FF0000")  # Red font color
     workbook.save(file_location())
     print_event(f"\n[+] All data has been saved in excel format in {file_location()}","yellow")
