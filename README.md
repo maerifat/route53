@@ -22,7 +22,7 @@ pip3 install r53collector
 
 `r53collector -u https://d-1010ad440.awsapps.com/start -cd -o myrecords.xlsx -v `
 ```bash
-r53collector -u https://d-1010ad440.awsapps.com/start -a 144313609872,330936112098,692902471034 -t a,cname,aaaa -e "^_.*|_(domainkey|dkim).*" -cd -o myrecords.xlsx -v
+r53collector -u https://d-1010ad440.awsapps.com/start -a 144313609872,330936112098,692902471034 -t a,cname,aaaa -e "^_.*|.*_(domainkey|dkim).*" -cd -o myrecords.xlsx -v
 ```
 
 
