@@ -28,11 +28,12 @@ This Python tool collects DNS records from AWS Route53 across multiple accounts 
 - Filter record types.
   - To get desired DNS record types only, use -types/-t. Multiple types can be selected separated by comma. Example :
     - _r53collector -u https://d-1010ad440.awsapps.com/start -t cname,a,aaaa_
-
   ```python
   r53collector -u <SSO Start URL> -t <Record Type> -v
 
 - Exclude record names using regex.
+  - If you want to filterout the undesired subdomains(record names) like containing _domainkey or _dkim or records starting with _, you can select regex after --exclude/-e. Example:
+    - _<span style="color:red">r53collector -u https://d-1010ad440.awsapps.com/start -e "^\_.\*\_(domainkey|dkim).\*" -v</span>_
   ```python
   python route53_record_collector.py -u <SSO Start URL> -a <Account IDs> -e <Regex> -v
 
