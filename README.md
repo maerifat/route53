@@ -1,4 +1,4 @@
-# Route53 Record Collector
+# Route53 Record Collector (r53collector)
 
 ## Overview
 This Python tool collects DNS records from AWS Route53 across multiple accounts using AWS SSO (Single Sign-On). It provides various options for listing, filtering, storing and analyzing the data.
