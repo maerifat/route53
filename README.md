@@ -33,11 +33,13 @@ This Python tool collects DNS records from AWS Route53 across multiple accounts 
 
 - Exclude record names using regex.
   - If you want to filterout the undesired subdomains(record names) like containing _domainkey or _dkim or records starting with _, you can select regex after --exclude/-e. Example:
-    - _<span style="color:red">r53collector -u https://d-1010ad440.awsapps.com/start -e "^\_.\*\_(domainkey|dkim).\*" -v</span>_
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -e "^\_.\*\_(domainkey|dkim).\*" -v_
   ```python
-  python route53_record_collector.py -u <SSO Start URL> -a <Account IDs> -e <Regex> -v
+  r53collector -u <SSO Start URL> -e <Regex> -v
 
 - Save output to a file.
+  - If you want to save the output to a file, use --output/-o. You have two format options xlsx(recommended) and txt. Format is recognised from the filename extension. Example:
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -o myrecords.xlsx -v_
   ```python
   python route53_record_collector.py -u <SSO Start URL> -a <Account IDs> -o <Output FileLocation> -v
 
