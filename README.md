@@ -1,7 +1,7 @@
 # Route53 Record Collector
 
 ## Overview
-This Python tool collects DNS records from AWS Route53 across multiple accounts using AWS SSO (Single Sign-On). It provides various options for listing, filtering, and analyzing the data.
+This Python tool collects DNS records from AWS Route53 across multiple accounts using AWS SSO (Single Sign-On). It provides various options for listing, filtering, storing and analyzing the data.
 
 ## Requirements
 - Python 3
@@ -11,19 +11,26 @@ This Python tool collects DNS records from AWS Route53 across multiple accounts 
 
 ## Usage
 
+### Every time you run this tool it will open up your default browser to authorize the device. You don't need any credentials or profiles separately to make it work.
 
 - Run accross all accounts
-  - _With out using --accounts/-a, the tool will gather all accounts you have privilege to and fetch details of dns records. If you use --verbose/-v then it will show extra information you may need otherwise without --verbose/-v it will only show unique subdomains(record names)._
+  - With out using --accounts/-a, the tool will gather all accounts you have privilege to and fetch details of dns records. If you use --verbose/-v then it will show extra information you may need otherwise without --verbose/-v it will only show unique subdomains(record names). Example :  
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -v_
   ```python
-  python route53_record_collector.py -u <SSO Start URL> -v
+  r53collector -u <SSO Start URL> -v
   
 - Run accross selective account[s].
+  - To get results from selective accounts, use --accounts/-a. Multiple accounts can be selected separated by comma. Example :
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -a 144313609872,330936112098,692902471034 -v_
   ```python
-  python route53_record_collector.py -u <SSO Start URL> -a <Account IDs> -v
+  r53collector -u <SSO Start URL> -a <Account IDs> -v
 
 - Filter record types.
+  - To get desired DNS record types only, use -types/-t. Multiple types can be selected separated by comma. Example :
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -t cname,a,aaaa_
+
   ```python
-  python route53_record_collector.py -u <SSO Start URL> -a <Account IDs> -t <Record Type> -v
+  r53collector -u <SSO Start URL> -t <Record Type> -v
 
 - Exclude record names using regex.
   ```python
