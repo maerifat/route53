@@ -54,7 +54,7 @@ r53collector -u https://d-1010ad440.awsapps.com/start -a 144313609872,3309361120
 
 - Exclude record names using regex.
   - If you want to filterout the undesired subdomains(record names) like containing _domainkey or _dkim or records starting with _, you can select regex after --exclude/-e. Example:
-    - _r53collector -u https://d-1010ad440.awsapps.com/start -e "^\_.\*|\_(domainkey|dkim).\*" -v_
+    - _r53collector -u https://d-1010ad440.awsapps.com/start -e "^\_.\*|.\*\_(domainkey|dkim).\*" -v_
   ```python
   r53collector -u <SSO Start URL> -e <Regex> -v
 
